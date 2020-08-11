@@ -103,6 +103,7 @@ int server_expect_yn = 0;
 char server_expect[MAX_INPUT_BUFFER] = HTTP_EXPECT;
 char header_expect[MAX_INPUT_BUFFER] = "";
 char string_expect[MAX_INPUT_BUFFER] = "";
+char string_expect_warning[MAX_INPUT_BUFFER] = "";
 char output_header_search[30] = "";
 char output_string_search[30] = "";
 char *warning_thresholds = NULL;
@@ -246,6 +247,7 @@ process_arguments (int argc, char **argv)
         {"proxy-authorization", required_argument, 0, 'b'},
         {"header-string", required_argument, 0, 'd'},
         {"string", required_argument, 0, 's'},
+        {"warn-string", optional_argument, 0, 'z'},
         {"expect", required_argument, 0, 'e'},
         {"regex", required_argument, 0, 'r'},
         {"ereg", required_argument, 0, 'r'},
@@ -287,7 +289,7 @@ process_arguments (int argc, char **argv)
     }
 
     while (1) {
-        c = getopt_long (argc, argv, "Vvh46t:c:w:A:k:H:P:j:T:I:a:b:d:e:p:s:R:r:u:f:C:J:K:nlLS::m:M:NEU", longopts, &option);
+        c = getopt_long (argc, argv, "Vvh46t:c:w:A:k:H:P:j:T:I:a:b:d:e:p:s:z:R:r:u:f:C:J:K:nlLS::m:M:NEU", longopts, &option);
         if (c == -1 || c == EOF)
             break;
 
@@ -482,6 +484,10 @@ enable_ssl:
             strncpy (string_expect, optarg, MAX_INPUT_BUFFER - 1);
             string_expect[MAX_INPUT_BUFFER - 1] = 0;
             break;
+        case 'z': /* string or substring */
+            strncpy (string_expect_warning, optarg, MAX_INPUT_BUFFER - 1);
+            string_expect_warning[MAX_INPUT_BUFFER - 1] = 0;
+	    break;
         case 'e': /* string or substring */
             strncpy (server_expect, optarg, MAX_INPUT_BUFFER - 1);
             server_expect[MAX_INPUT_BUFFER - 1] = 0;
@@ -1449,6 +1455,14 @@ check_http (void)
         }
     }
 
+    /* If we find the warning string (e.g. site is in expected maintenance), set the result to warn */
+    if (strlen (string_expect_warning)) {
+        if (strstr(page, string_expect_warning)) {
+            xasprintf (&msg, _("%s warning string '%s' found on '%s://%s:%d%s', "), msg, string_expect_warning, use_ssl ? "https" : "http", host_name ? host_name : server_address, server_port, server_url);
+            result = STATE_WARNING;
+        }
+    }
+
     if (strlen (regexp)) {
         errcode = regexec (&preg, page, REGS, pmatch, 0);
         if ((errcode == 0 && invert_regex == 0) || (errcode == REG_NOMATCH && invert_regex == 1)) {
@@ -1829,6 +1843,8 @@ print_help (void)
     printf ("    %s\n", _("String to expect in the response headers"));
     printf (" %s\n", "-s, --string=STRING");
     printf ("    %s\n", _("String to expect in the content"));
+    printf (" %s\n", "-z, --warn-string=STRING");
+    printf ("    %s\n", _("String to expect in the content, if found, will return a warning"));
     printf (" %s\n", "-u, --uri=PATH");
     printf ("    %s\n", _("URI to GET or POST (default: /)"));
     printf (" %s\n", "--url=PATH");
@@ -1943,7 +1959,7 @@ print_usage (void)
     printf ("       [-J <client certificate file>] [-K <private key>]\n");
     printf ("       [-w <warn time>] [-c <critical time>] [-t <timeout>] [-L] [-E] [-U] [-a auth]\n");
     printf ("       [-b proxy_auth] [-f <ok|warning|critical|follow|sticky|stickyport>]\n");
-    printf ("       [-e <expect>] [-d string] [-s string] [-l] [-r <regex> | -R <case-insensitive regex>]\n");
+    printf ("       [-e <expect>] [-d string] [-s string] [-z string] [-l] [-r <regex> | -R <case-insensitive regex>]\n");
     printf ("       [-P string] [-m <min_pg_size>:<max_pg_size>] [-4|-6] [-N] [-M <age>]\n");
 
 #if OPENSSL_VERSION_NUMBER >= 0x10002000L
@@ -1954,3 +1970,4 @@ print_usage (void)
     printf ("       [-T <content-type>] [-j method]\n");
 #endif
 }
+
